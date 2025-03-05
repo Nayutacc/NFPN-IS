@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from model.ctNet.minet import miNet
 from model.ctNet.resnet2020 import Bottleneck, ResNetCt, ResNetCt_2
 from model.featureshow import featureshow
-
+from model.ctNet.heatmap import get_heatmap
 
 class Down(nn.Module):
     def __init__(self,
@@ -42,9 +42,7 @@ class Down(nn.Module):
         x = self.stem(x)
         # ret.append(x)
         x = self.down1(x)
-
         x = self.down2(x)
-        # featureshow(x[3])
         return x
 
 
@@ -168,6 +166,7 @@ class Nest_U_Net(miNet):
 
     def funIndividual(self, x):
         x1 = self.down(x)
+        print(len(x1))
         return x1
 
     def funPallet(self, x):

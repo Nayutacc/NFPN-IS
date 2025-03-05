@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch.nn import MSELoss
+
 
 # class Loss:
 #     pass
@@ -21,46 +23,48 @@ class FL(nn.Module):
     def forward(self, preds, targets):
         return _neg_loss(preds, targets)
 
+
 def _neg_loss(preds, targets):
-  ''' Modified focal loss. Exactly the same as CornerNet.
+    ''' Modified focal loss. Exactly the same as CornerNet.
       Runs faster and costs a little bit more memory
       Arguments:
       preds (B x c x h x w)
       gt_regr (B x c x h x w)
   '''
-  pos_inds = targets.eq(1).float()
-  neg_inds = targets.lt(1).float()
+    pos_inds = targets.eq(1).float()
+    neg_inds = targets.lt(1).float()
 
-  neg_weights = torch.pow(1 - targets, 4)
+    neg_weights = torch.pow(1 - targets, 4)
 
-  loss = 0
-  for pred in preds:
-    # pred = torch.clamp(torch.sigmoid(pred), min=1e-4, max=1 - 1e-4)
-    pred = torch.clamp(pred, min=1e-4, max=1 - 1e-4)
-    pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds
-    neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
+    loss = 0
+    for pred in preds:
+        # pred = torch.clamp(torch.sigmoid(pred), min=1e-4, max=1 - 1e-4)
+        pred = torch.clamp(pred, min=1e-4, max=1 - 1e-4)
+        pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds
+        neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
 
-    num_pos = pos_inds.float().sum()
-    pos_loss = pos_loss.sum()
-    neg_loss = neg_loss.sum()
+        num_pos = pos_inds.float().sum()
+        pos_loss = pos_loss.sum()
+        neg_loss = neg_loss.sum()
 
-    if num_pos == 0:
-      loss = loss - neg_loss
-    else:
-      loss = loss - (pos_loss + neg_loss) / num_pos
-  return loss / len(preds)
+        if num_pos == 0:
+            loss = loss - neg_loss
+        else:
+            loss = loss - (pos_loss + neg_loss) / num_pos
+    return loss / len(preds)
+
 
 class Focalloss(nn.Module):
-    def __init__(self, gamma=2, alpha=0.25, aver = False):
-        super(Focalloss,self).__init__()
+    def __init__(self, gamma=2, alpha=0.25, aver=False):
+        super(Focalloss, self).__init__()
         self.gamma = gamma
         self.alpha = alpha
         self.aver = aver
 
-    def forward(self, pred, target, weights = None):
+    def forward(self, pred, target, weights=None):
         pos_inds = target.eq(1).float()
         neg_inds = target.eq(0).float()
-        pos_loss = -self.alpha*torch.log(pred) * torch.pow(1 - pred, self.gamma) * pos_inds
+        pos_loss = -self.alpha * torch.log(pred) * torch.pow(1 - pred, self.gamma) * pos_inds
         neg_loss = -torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
         loss = pos_loss + neg_loss
 
@@ -70,6 +74,7 @@ class Focalloss(nn.Module):
             loss = loss.sum()
 
         return loss
+
 
 class SoftIoULoss(nn.Module):
     def __init__(self):
@@ -103,3 +108,19 @@ class SoftIoULoss(nn.Module):
 Loss = torch.nn.MSELoss
 Loss2 = SoftIoULoss
 
+
+class CustomLoss(nn.Module):
+    def __init__(self, W_MSE=0.5, W_LSP=0.5):
+        super(CustomLoss, self).__init__()
+        self.mseloss = nn.MSELoss()
+        self.W_MSE = W_MSE  # 初始的W_MSE
+        self.W_LSP = W_LSP  # 初始的W_LSP
+
+    def forward(self, predicted, target, interference):
+        # 将张量移到同一个设备上
+        device = predicted.device
+        target = target.to(device)
+        interference = interference.to(device)
+        # 计算损失 
+        loss = self.W_MSE * self.mseloss(predicted, target) + self.W_LSP * (1 - self.mseloss(predicted, interference))
+        return loss
